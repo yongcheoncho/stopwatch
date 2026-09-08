@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>스탑워치</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow: hidden;
+    background: #0b1026;
+  }
+
+  /* ===================== 배경 씬 ===================== */
+  .scene {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .sky {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+  }
+  .scene[data-phase="0"] .sky.morning { opacity: 1; }
+  .scene[data-phase="1"] .sky.noon    { opacity: 1; }
+  .scene[data-phase="2"] .sky.evening { opacity: 1; }
+  .scene[data-phase="3"] .sky.night   { opacity: 1; }
+
+  .sky.morning { background: linear-gradient(180deg,#8ecbef 0%,#cfe8f5 38%,#ffe1ba 78%,#ffce9c 100%); }
+  .sky.noon    { background: linear-gradient(180deg,#3f9be8 0%,#7cc0f0 55%,#cdeaff 100%); }
+  .sky.evening { background: linear-gradient(180deg,#39397c 0%,#8a5a9e 40%,#ff7e5f 72%,#ffb27b 100%); }
+  .sky.night   { background: linear-gradient(180deg,#060a1c 0%,#111a3a 55%,#1e2a52 100%); }
+
+  /* 별 (밤) */
+  .sky.night::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 30% 0;
+    background-image:
+      radial-gradient(1.6px 1.6px at 12% 20%, #fff, transparent),
+      radial-gradient(1.4px 1.4px at 27% 12%, #fff, transparent),
+      radial-gradient(1.8px 1.8px at 41% 28%, #fff, transparent),
+      radial-gradient(1.3px 1.3px at 58% 16%, #fff, transparent),
+      radial-gradient(1.7px 1.7px at 70% 30%, #fff, transparent),
+      radial-gradient(1.4px 1.4px at 82% 12%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 90% 24%, #fff, transparent),
+      radial-gradient(1.3px 1.3px at 34% 40%, #fff, transparent),
+      radial-gradient(1.6px 1.6px at 6% 44%, #fff, transparent);
+    animation: twinkle 3.5s ease-in-out infinite;
+  }
+  @keyframes twinkle { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+  /* 해 / 달 */
+  .orb { position: absolute; border-radius: 50%; }
+  .sky.morning .orb {
+    width: 72px; height: 72px; left: 12%; bottom: 34%;
+    background: radial-gradient(circle at 40% 40%, #fff4c6, #ffd36b);
+    box-shadow: 0 0 60px 22px rgba(255,214,120,.55);
+  }
+  .sky.noon .orb {
+    width: 84px; height: 84px; left: calc(50% - 42px); top: 8%;
+    background: radial-gradient(circle at 45% 40%, #ffffff, #fff1b8);
+    box-shadow: 0 0 100px 46px rgba(255,244,180,.6);
+  }
+  .sky.evening .orb {
+    width: 116px; height: 116px; right: 15%; bottom: 24%;
+    background: radial-gradient(circle at 45% 45%, #ffdba6, #ff8c42);
+    box-shadow: 0 0 130px 55px rgba(255,120,60,.5);
+  }
+  .sky.night .orb {
+    width: 64px; height: 64px; right: 15%; top: 13%;
+    background: radial-gradient(circle at 62% 38%, #f6f8ff, #c9d3e8);
+    box-shadow: 0 0 52px 14px rgba(210,220,245,.35);
+  }
+  .sky.night .orb::after {
+    content: ""; position: absolute; width: 18px; height: 18px; border-radius: 50%;
+    top: 12px; right: 12px; background: rgba(0,0,0,.12); box-shadow: 10px 22px 0 -2px rgba(0,0,0,.10);
+  }
+
+  /* 구름 */
+  .cloud {
+    position: absolute; font-size: 42px; line-height: 1; user-select: none;
+    filter: drop-shadow(0 6px 6px rgba(0,0,0,.08));
+    animation: drift 30s linear infinite;
+  }
+  .cloud.c1 { top: 13%; animation-delay: -5s; }
+  .cloud.c2 { top: 24%; font-size: 30px; opacity: .75; animation-delay: -17s; }
+  .scene.run .cloud { animation-duration: 10s; }
+  @keyframes drift { from { transform: translateX(110vw); } to { transform: translateX(-25vw); } }
+
+  /* 도로 */
+  .road {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 24%;
+    background: linear-gradient(180deg,#4a4a52,#31313a);
+    border-top: 3px solid rgba(255,255,255,.22);
+    z-index: 1;
+  }
+  .track {
+    position: absolute; left: 0; right: 0; bottom: 11%; height: 8px; z-index: 3;
+    background: repeating-linear-gradient(90deg,#ffd54a 0 46px, transparent 46px 96px);
+    opacity: .9;
+  }
+  .scene.run .track { animation: roll .5s linear infinite; }
+  @keyframes roll { to { background-position: -96px 0; } }
+
+  /* 스쳐 지나가는 나무 */
+  .scenery { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  .tree {
+    position: absolute; bottom: 21%; font-size: 46px; line-height: 1; user-select: none;
+    transform: translateX(110vw);
+    animation: treeMove 6.5s linear infinite;
+    animation-play-state: paused;
+  }
+  .scene.run .tree { animation-play-state: running; }
+  .tree:nth-child(1) { animation-delay: 0s; }
+  .tree:nth-child(2) { animation-delay: -2.1s; font-size: 34px; bottom: 22%; opacity: .9; }
+  .tree:nth-child(3) { animation-delay: -4.3s; font-size: 56px; }
+  @keyframes treeMove { from { transform: translateX(106vw); } to { transform: translateX(-16vw); } }
+
+  /* ===================== 캐릭터 ===================== */
+  .runner {
+    position: absolute; left: 50%; bottom: 15%;
+    width: 200px; height: 240px; margin-left: -100px;
+    z-index: 5;
+  }
+  .runner svg { width: 100%; height: 100%; overflow: visible; }
+
+  .shadow { fill: rgba(0,0,0,.22); }
+
+  .char .body    { fill: #f2c6a0; }
+  .char .singlet { fill: #2f6df0; }
+  .char .face    { fill: #f6cfa8; }
+  .char .hair    { fill: #3a2a1c; }
+  .char .ear     { fill: #f0bd93; }
+  .char .thigh   { fill: #22252e; }
+  .char .shin    { fill: #f2c6a0; }
+  .char .shoe    { fill: #ff4d4d; }
+  .char .upper   { fill: #f2c6a0; }
+  .char .fore    { fill: #f2c6a0; }
+  .char .hand    { fill: #f0bd93; }
+  .char .band    { fill: #ffffff; }
+
+  /* 관절 회전 기준점 */
+  .char, .arm, .leg, .shin-wrap, .fore-wrap, .torso, .head {
+    transform-box: fill-box;
+  }
+  .arm, .leg      { transform-origin: 50% 0%; }
+  .shin-wrap, .fore-wrap { transform-origin: 50% 0%; }
+  .torso          { transform-origin: 50% 100%; }
+  .head           { transform-origin: 50% 100%; }
+  .char           { transform-origin: 50% 92%; }
+
+  /* 상태 전환은 부드럽게 */
+  .char, .arm, .leg, .shin-wrap, .fore-wrap, .torso, .head {
+    transition: transform .45s cubic-bezier(.4,.1,.3,1);
+  }
+
+  /* --- 대기(정지 전) : 서 있음 --- */
+  .runner.idle .char      { animation: breathe 3s ease-in-out infinite; }
+  .runner.idle .arm-front  { transform: rotate(6deg); }
+  .runner.idle .arm-back   { transform: rotate(-5deg); }
+  .runner.idle .arm .fore-wrap { transform: rotate(-7deg); }
+  .runner.idle .leg-front  { transform: rotate(4deg); }
+  .runner.idle .leg-back   { transform: rotate(-4deg); }
+  .runner.idle .shin-wrap  { transform: rotate(3deg); }
+  @keyframes breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+
+  /* --- 달리는 중 --- */
+  .runner.running .char             { animation: bob .24s ease-in-out infinite; }
+  .runner.running .leg-front        { animation: legFront .48s ease-in-out infinite; }
+  .runner.running .leg-back         { animation: legBack  .48s ease-in-out infinite; }
+  .runner.running .leg-front .shin-wrap { animation: shinFront .48s ease-in-out infinite; }
+  .runner.running .leg-back  .shin-wrap { animation: shinBack  .48s ease-in-out infinite; }
+  .runner.running .arm-front        { animation: armFront .48s ease-in-out infinite; }
+  .runner.running .arm-back         { animation: armBack  .48s ease-in-out infinite; }
+  .runner.running .arm .fore-wrap   { animation: foreRun  .48s ease-in-out infinite; }
+
+  @keyframes bob      { 0%,100% { transform: translateY(0) rotate(9deg); } 50% { transform: translateY(-8px) rotate(9deg); } }
+  @keyframes legFront { 0% { transform: rotate(30deg); } 50% { transform: rotate(-38deg); } 100% { transform: rotate(30deg); } }
+  @keyframes legBack  { 0% { transform: rotate(-38deg); } 50% { transform: rotate(30deg); } 100% { transform: rotate(-38deg); } }
+  @keyframes shinFront{ 0% { transform: rotate(8deg); } 40% { transform: rotate(14deg); } 55% { transform: rotate(74deg); } 80% { transform: rotate(88deg); } 100% { transform: rotate(8deg); } }
+  @keyframes shinBack { 0% { transform: rotate(82deg); } 50% { transform: rotate(12deg); } 100% { transform: rotate(82deg); } }
+  @keyframes armFront { 0% { transform: rotate(-48deg); } 50% { transform: rotate(42deg); } 100% { transform: rotate(-48deg); } }
+  @keyframes armBack  { 0% { transform: rotate(42deg); } 50% { transform: rotate(-48deg); } 100% { transform: rotate(42deg); } }
+  @keyframes foreRun  { 0%,100% { transform: rotate(-58deg); } 50% { transform: rotate(-74deg); } }
+
+  /* --- 잠시 멈춤 : 앉아서 휴식 --- */
+  .runner.resting .char    { transform: translateY(44px); }
+  .runner.resting .torso   { animation: breatheSit 2.6s ease-in-out infinite; }
+  @keyframes breatheSit { 0%,100% { transform: rotate(-7deg) scaleY(1); } 50% { transform: rotate(-7deg) scaleY(1.035); } }
+  .runner.resting .head    { transform: rotate(7deg); }
+  .runner.resting .leg-front            { transform: rotate(-80deg); }
+  .runner.resting .leg-front .shin-wrap { transform: rotate(92deg); }
+  .runner.resting .leg-back             { transform: rotate(-68deg); }
+  .runner.resting .leg-back  .shin-wrap { transform: rotate(78deg); }
+  .runner.resting .arm-back             { transform: rotate(150deg); }
+  .runner.resting .arm-back  .fore-wrap { transform: rotate(24deg); }
+  .runner.resting .arm-front            { transform: rotate(-34deg); }
+  .runner.resting .arm-front .fore-wrap { transform: rotate(-78deg); }
+
+  /* ===================== 스탑워치 카드 ===================== */
+  .card {
+    position: relative;
+    z-index: 10;
+    background: rgba(18,20,28,.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 20px;
+    padding: 36px 40px;
+    width: 100%;
+    max-width: 420px;
+    color: #f2f4f8;
+    box-shadow: 0 24px 70px rgba(0,0,0,.45);
+  }
+  h1 {
+    font-size: 13px; font-weight: 600; letter-spacing: 3px;
+    text-transform: uppercase; color: #9aa3b4; text-align: center; margin-bottom: 10px;
+  }
+  .phase {
+    text-align: center; font-size: 13px; color: #cdd4e0; margin-bottom: 22px;
+  }
+  .phase b { color: #ffd76b; font-weight: 700; }
+  .display {
+    font-variant-numeric: tabular-nums; text-align: center; margin-bottom: 28px;
+  }
+  .display .main { font-size: 56px; font-weight: 700; letter-spacing: 1px; }
+  .display .ms   { font-size: 24px; font-weight: 500; color: #9aa3b4; margin-left: 4px; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  button {
+    font-size: 16px; font-weight: 600; padding: 14px 0; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.08);
+    color: #f2f4f8; cursor: pointer;
+    transition: transform .05s ease, background .15s ease, opacity .15s ease;
+  }
+  button:hover  { background: rgba(255,255,255,.16); }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .38; cursor: not-allowed; }
+  button.primary { background: #4ade80; color: #05270f; border-color: transparent; }
+  button.primary:hover { background: #6ee79b; }
+  button.danger  { background: #f87171; color: #2b0808; border-color: transparent; }
+  button.danger:hover { background: #ff8f8f; }
+  .laps { list-style: none; max-height: 190px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,.12); }
+  .laps li {
+    display: flex; justify-content: space-between; padding: 11px 4px; font-size: 15px;
+    font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(255,255,255,.10); color: #9aa3b4;
+  }
+  .laps li span:last-child { color: #f2f4f8; font-weight: 500; }
+  .laps li.best  span:last-child { color: #4ade80; }
+  .laps li.worst span:last-child { color: #f87171; }
+  .laps::-webkit-scrollbar { width: 6px; }
+  .laps::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+  <div class="scene" id="scene" data-phase="0">
+    <div class="sky morning"><div class="orb"></div></div>
+    <div class="sky noon"><div class="orb"></div></div>
+    <div class="sky evening"><div class="orb"></div></div>
+    <div class="sky night"><div class="orb"></div></div>
+
+    <div class="cloud c1">☁️</div>
+    <div class="cloud c2">☁️</div>
+
+    <div class="scenery">
+      <div class="tree">🌳</div>
+      <div class="tree">🌲</div>
+      <div class="tree">🌳</div>
+    </div>
+
+    <div class="road"></div>
+    <div class="track"></div>
+
+    <div class="runner idle" id="runner">
+      <svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+        <ellipse class="shadow" cx="100" cy="228" rx="46" ry="9"/>
+        <g class="char">
+          <!-- 뒤쪽 팔 -->
+          <g class="arm arm-back">
+            <rect class="upper" x="94" y="72" width="11" height="26" rx="5.5"/>
+            <g class="fore-wrap">
+              <rect class="fore" x="94" y="96" width="10" height="24" rx="5"/>
+              <circle class="hand" cx="99" cy="122" r="5.5"/>
+            </g>
+          </g>
+          <!-- 뒤쪽 다리 -->
+          <g class="leg leg-back">
+            <rect class="thigh" x="92" y="126" width="13" height="33" rx="6.5"/>
+            <g class="shin-wrap">
+              <rect class="shin" x="92" y="157" width="12" height="30" rx="6"/>
+              <path class="shoe" d="M92 185 h10 q11 0 15 6 q1 6 -5 6 h-21 q-3 -1 1 -8 z"/>
+            </g>
+          </g>
+          <!-- 몸통 + 머리 -->
+          <g class="torso">
+            <rect class="body" x="86" y="74" width="28" height="58" rx="13"/>
+            <rect class="singlet" x="86" y="74" width="28" height="32" rx="13"/>
+            <g class="head">
+              <circle class="ear" cx="84" cy="55" r="3.4"/>
+              <circle class="face" cx="100" cy="54" r="17"/>
+              <path class="hair" d="M82 52 q2 -22 32 -16 q8 2 8 11 q-9 -8 -22 -4 q-11 3 -13 13 q-3 -1 -5 -4z"/>
+              <rect class="band" x="83" y="44" width="34" height="5" rx="2.5" transform="rotate(-4 100 46)"/>
+            </g>
+          </g>
+          <!-- 앞쪽 다리 -->
+          <g class="leg leg-front">
+            <rect class="thigh" x="93" y="126" width="14" height="34" rx="7"/>
+            <g class="shin-wrap">
+              <rect class="shin" x="94" y="158" width="12" height="30" rx="6"/>
+              <path class="shoe" d="M94 186 h10 q11 0 15 6 q1 6 -5 6 h-21 q-3 -1 1 -8 z"/>
+            </g>
+          </g>
+          <!-- 앞쪽 팔 -->
+          <g class="arm arm-front">
+            <rect class="upper" x="95" y="72" width="12" height="27" rx="6"/>
+            <g class="fore-wrap">
+              <rect class="fore" x="95" y="97" width="11" height="25" rx="5.5"/>
+              <circle class="hand" cx="100" cy="124" r="6"/>
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1>스탑워치</h1>
+    <div class="phase"><b id="phaseName">아침</b> · <span id="phaseCountdown">15</span>초 후 배경 전환</div>
+    <div class="display">
+      <span class="main" id="main">00:00</span><span class="ms" id="ms">.00</span>
+    </div>
+    <div class="controls">
+      <button id="startStop" class="primary">시작</button>
+      <button id="lapReset" disabled>랩</button>
+    </div>
+    <ul class="laps" id="laps"></ul>
+  </div>
+
+<script>
+(function () {
+  const mainEl = document.getElementById('main');
+  const msEl = document.getElementById('ms');
+  const startStopBtn = document.getElementById('startStop');
+  const lapResetBtn = document.getElementById('lapReset');
+  const lapsEl = document.getElementById('laps');
+  const scene = document.getElementById('scene');
+  const runner = document.getElementById('runner');
+  const phaseNameEl = document.getElementById('phaseName');
+  const phaseCountdownEl = document.getElementById('phaseCountdown');
+
+  const PHASE_MS = 15000;
+  const PHASE_NAMES = ['아침', '점심', '저녁', '밤'];
+
+  let running = false;
+  let startTime = 0;
+  let elapsed = 0;
+  let rafId = null;
+  let laps = [];
+  let lastLapTime = 0;
+
+  function format(ms) {
+    const totalCs = Math.floor(ms / 10);
+    const cs = totalCs % 100;
+    const totalSec = Math.floor(totalCs / 100);
+    const sec = totalSec % 60;
+    const totalMin = Math.floor(totalSec / 60);
+    const min = totalMin % 60;
+    const hrs = Math.floor(totalMin / 60);
+    const pad = (n) => String(n).padStart(2, '0');
+    const main = hrs > 0 ? `${pad(hrs)}:${pad(min)}:${pad(sec)}` : `${pad(min)}:${pad(sec)}`;
+    return { main, ms: pad(cs) };
+  }
+
+  function currentElapsed() {
+    return running ? (performance.now() - startTime + elapsed) : elapsed;
+  }
+
+  function updateScene(now) {
+    const phase = Math.floor(now / PHASE_MS) % 4;
+    if (scene.dataset.phase !== String(phase)) scene.dataset.phase = String(phase);
+    phaseNameEl.textContent = PHASE_NAMES[phase];
+    const remain = Math.max(1, Math.ceil((PHASE_MS - (now % PHASE_MS)) / 1000));
+    phaseCountdownEl.textContent = remain;
+  }
+
+  function render() {
+    const now = currentElapsed();
+    const f = format(now);
+    mainEl.textContent = f.main;
+    msEl.textContent = '.' + f.ms;
+    updateScene(now);
+    if (running) rafId = requestAnimationFrame(render);
+  }
+
+  function setRunnerState(state) {
+    runner.classList.remove('idle', 'running', 'resting');
+    runner.classList.add(state);
+    scene.classList.toggle('run', state === 'running');
+  }
+
+  function start() {
+    running = true;
+    startTime = performance.now();
+    rafId = requestAnimationFrame(render);
+    startStopBtn.textContent = '정지';
+    startStopBtn.classList.remove('primary');
+    startStopBtn.classList.add('danger');
+    lapResetBtn.textContent = '랩';
+    lapResetBtn.disabled = false;
+    setRunnerState('running');
+  }
+
+  function stop() {
+    running = false;
+    elapsed += performance.now() - startTime;
+    cancelAnimationFrame(rafId);
+    render();
+    startStopBtn.textContent = '계속';
+    startStopBtn.classList.remove('danger');
+    startStopBtn.classList.add('primary');
+    lapResetBtn.textContent = '초기화';
+    setRunnerState('resting');
+  }
+
+  function reset() {
+    running = false;
+    cancelAnimationFrame(rafId);
+    elapsed = 0;
+    laps = [];
+    lastLapTime = 0;
+    lapsEl.innerHTML = '';
+    render();
+    startStopBtn.textContent = '시작';
+    startStopBtn.classList.remove('danger');
+    startStopBtn.classList.add('primary');
+    lapResetBtn.textContent = '랩';
+    lapResetBtn.disabled = true;
+    setRunnerState('idle');
+  }
+
+  function addLap() {
+    const total = currentElapsed();
+    const split = total - lastLapTime;
+    lastLapTime = total;
+    laps.push({ split, total });
+    redrawLaps();
+  }
+
+  function redrawLaps() {
+    lapsEl.innerHTML = '';
+    let bestIdx = -1, worstIdx = -1;
+    if (laps.length > 1) {
+      let min = Infinity, max = -Infinity;
+      laps.forEach((l, i) => {
+        if (l.split < min) { min = l.split; bestIdx = i; }
+        if (l.split > max) { max = l.split; worstIdx = i; }
+      });
+    }
+    laps.forEach((l, i) => {
+      const li = document.createElement('li');
+      if (i === bestIdx) li.classList.add('best');
+      if (i === worstIdx) li.classList.add('worst');
+      const f = format(l.split);
+      li.innerHTML = `<span>랩 ${i + 1}</span><span>${f.main}.${f.ms}</span>`;
+      lapsEl.prepend(li);
+    });
+  }
+
+  startStopBtn.addEventListener('click', () => { running ? stop() : start(); });
+  lapResetBtn.addEventListener('click', () => { running ? addLap() : reset(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { e.preventDefault(); running ? stop() : start(); }
+    else if (e.key.toLowerCase() === 'l' && !lapResetBtn.disabled) { lapResetBtn.click(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
